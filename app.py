@@ -16,13 +16,14 @@ DATABASE_PATH = os.getenv('DATABASE_PATH', '/data/menu.db')
 def init_db():
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-
+    
     # 테이블 생성 (meals에 lunch와 dinner 정보 통합)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS menu (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
-        meals TEXT NOT NULL  -- JSON 형태로 lunch와 dinner를 함께 저장
+        meals TEXT NOT NULL,  -- JSON 형태로 lunch와 dinner를 함께 저장
+        order_seq TEXT NOT NULL  -- 조 순서 저장
     )
     ''')
     conn.commit()
@@ -37,17 +38,19 @@ def get_all_menu():
     
     cursor.execute('SELECT * FROM menu')
     rows = cursor.fetchall()
+    
+    conn.close()
 
     # 데이터 변환
     menus = [
         {
             "id": row[0],
             "date": row[1],
-            "meals": json.loads(row[2])  # meals에 lunch와 dinner 모두 포함
+            "meals": json.loads(row[2]),    # meals에 lunch와 dinner 모두 포함
+            "order": json.loads(row[3])
         }
         for row in rows
     ]
-    conn.close()
     
     # UTF-8 헤더 추가
     response = make_response(jsonify(menus))
@@ -60,18 +63,24 @@ def get_menu_by_date(date):
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     
-    cursor.execute('SELECT meals FROM menu WHERE date = ?', (date,))
+    cursor.execute('SELECT meals, order_seq FROM menu WHERE date = ?', (date,))
     row = cursor.fetchone()
+    
+    conn.close()
 
     if not row:
         return jsonify({"error": "No menu found for this date"}), 404
 
     # meals 데이터를 JSON으로 변환
     meals = json.loads(row[0])
-    conn.close()
-
+    order = json.loads(row[1])
+    
     # UTF-8 Content-Type 명시
-    response = make_response(jsonify({"date": date, "meals": meals}))
+    response = make_response(jsonify({
+        "date": date,
+        "meals": meals,
+        "order": order
+    }))
     response.headers["Content-Type"] = "application/json; charset=utf-8"
     return response
 
@@ -82,14 +91,23 @@ def add_menu():
         data = request.get_json()
 
         # 필수 필드 확인
-        if 'date' not in data or 'meals' not in data:
-            return jsonify({"error": "'date'와 'meals' 필드는 필수입니다."}), 400
+        if 'date' not in data or 'meals' not in data or 'order' not in data:
+            return jsonify({"error": "'date', 'meals', 'order' 필드는 필수입니다."}), 400
 
         meals = data['meals']
+        order = data['order']
+
+        # order 유효성 검사
+        valid_orders = {"1조", "2조", "3조"}
+        
+        if not isinstance(order, list) or set(order) != valid_orders:
+            return jsonify({
+                "error": "'order'는 '1조', '2조', '3조'를 포함한 리스트여야 하며, 순서만 바뀔 수 있습니다."
+            }), 400
 
         # meals 내부의 lunch와 dinner 필드 검증
         required_meal_fields = ['rice', 'soup', 'dishes', 'kimchi', 'plus_corner']
-
+        
         for meal_type in ['lunch', 'dinner']:
             if meal_type not in meals:
                 return jsonify({"error": f"meals에는 '{meal_type}'가 포함되어야 합니다."}), 400
@@ -102,12 +120,16 @@ def add_menu():
 
         conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
-
+        
         # 데이터 삽입 (JSON 형태로 저장)
         cursor.execute('''
-        INSERT INTO menu (date, meals)
-        VALUES (?, ?)
-        ''', (data['date'], json.dumps(data['meals'], ensure_ascii=False)))
+        INSERT INTO menu (date, meals, order_seq)
+        VALUES (?, ?, ?)
+        ''', (
+            data['date'],
+            json.dumps(data['meals'], ensure_ascii=False),
+            json.dumps(order, ensure_ascii=False)
+        ))
         conn.commit()
         conn.close()
 
@@ -115,10 +137,9 @@ def add_menu():
 
     except Exception as e:
         return make_response(jsonify({"error": str(e)}), 500)
-    
-# 데이터베이스 초기화
+
+# 데이터베이스 초기화 및 서버 시작
 init_db()
 
-# 서버 시작
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
