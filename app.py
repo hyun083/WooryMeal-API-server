@@ -21,7 +21,7 @@ def init_db():
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS menu (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
+        date TEXT NOT NULL UNIQUE,
         meals TEXT NOT NULL,  -- JSON 형태로 lunch와 dinner를 함께 저장
         order_seq TEXT NOT NULL  -- 조 순서 저장
     )
@@ -134,6 +134,9 @@ def add_menu():
         conn.close()
 
         return make_response(jsonify({"message": "Menu added successfully"}), 201)
+
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "이미 존재하는 날짜입니다."}), 409
 
     except Exception as e:
         return make_response(jsonify({"error": str(e)}), 500)
