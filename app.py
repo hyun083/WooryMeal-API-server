@@ -84,6 +84,22 @@ def get_menu_by_date(date):
     response.headers["Content-Type"] = "application/json; charset=utf-8"
     return response
 
+# 특정 날짜 메뉴 삭제
+@app.route('/menu/<date>', methods=['DELETE'])
+def delete_menu_by_date(date):
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute('DELETE FROM menu WHERE date = ?', (date,))
+    conn.commit()
+    deleted_count = cursor.rowcount
+    conn.close()
+
+    if deleted_count == 0:
+        return jsonify({"error": "No menu found for this date"}), 404
+
+    return make_response(jsonify({"message": "Menu deleted successfully"}), 200)
+
 # 메뉴 데이터 추가
 @app.route('/menu', methods=['POST'])
 def add_menu():
