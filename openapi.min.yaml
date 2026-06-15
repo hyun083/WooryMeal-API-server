@@ -1,0 +1,250 @@
+openapi: 3.1.0
+info:
+  title: WooryMeal API Server (Minimal)
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+
+paths:
+  /menu:
+    get:
+      summary: 전체 메뉴 조회
+      operationId: getAllMenu
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuItem'
+
+    post:
+      summary: 메뉴 추가
+      operationId: addMenu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /menu/{date}:
+    get:
+      summary: 특정 날짜 메뉴 조회
+      operationId: getMenuByDate
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+          example: '2025-05-20'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuByDate'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+    put:
+      summary: 특정 날짜 메뉴 수정
+      operationId: updateMenuByDate
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+          example: '2025-05-20'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+    delete:
+      summary: 특정 날짜 메뉴 삭제
+      operationId: deleteMenuByDate
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+          example: '2025-05-20'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+components:
+  parameters:
+    DateParam:
+      name: date
+      in: path
+      required: true
+      schema:
+        type: string
+        format: date
+      example: '2025-05-20'
+
+  schemas:
+    MealPart:
+      type: object
+      required: [rice, soup, dishes, kimchi, plus_corner]
+      properties:
+        rice:
+          type: array
+          items:
+            type: string
+        soup:
+          type: string
+        dishes:
+          type: array
+          items:
+            type: string
+        kimchi:
+          type: string
+        plus_corner:
+          type: array
+          items:
+            type: string
+
+    Meals:
+      type: object
+      required: [lunch, dinner]
+      properties:
+        lunch:
+          $ref: '#/components/schemas/MealPart'
+        dinner:
+          $ref: '#/components/schemas/MealPart'
+
+    Order:
+      type: array
+      minItems: 3
+      maxItems: 3
+      uniqueItems: true
+      items:
+        type: string
+        enum: ['1조', '2조', '3조']
+
+    MenuItem:
+      type: object
+      required: [id, date, meals, order]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        meals:
+          $ref: '#/components/schemas/Meals'
+        order:
+          $ref: '#/components/schemas/Order'
+
+    MenuByDate:
+      type: object
+      required: [date, meals, order]
+      properties:
+        date:
+          type: string
+          format: date
+        meals:
+          $ref: '#/components/schemas/Meals'
+        order:
+          $ref: '#/components/schemas/Order'
+
+    MenuCreateRequest:
+      type: object
+      required: [date, meals, order]
+      properties:
+        date:
+          type: string
+          format: date
+        meals:
+          $ref: '#/components/schemas/Meals'
+        order:
+          $ref: '#/components/schemas/Order'
+
+    MenuUpdateRequest:
+      type: object
+      required: [meals, order]
+      properties:
+        meals:
+          $ref: '#/components/schemas/Meals'
+        order:
+          $ref: '#/components/schemas/Order'
+
+    SuccessMessage:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    ErrorMessage:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
