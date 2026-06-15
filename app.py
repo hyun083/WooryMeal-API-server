@@ -100,6 +100,65 @@ def delete_menu_by_date(date):
 
     return make_response(jsonify({"message": "Menu deleted successfully"}), 200)
 
+# 특정 날짜 메뉴 수정
+@app.route('/menu/<date>', methods=['PUT'])
+def update_menu_by_date(date):
+    try:
+        data = request.get_json()
+
+        # 필수 필드 확인
+        if 'meals' not in data or 'order' not in data:
+            return jsonify({"error": "'meals', 'order' 필드는 필수입니다."}), 400
+
+        meals = data['meals']
+        order = data['order']
+
+        # order 유효성 검사
+        valid_orders = {"1조", "2조", "3조"}
+        
+        if not isinstance(order, list) or set(order) != valid_orders:
+            return jsonify({
+                "error": "'order'는 '1조', '2조', '3조'를 포함한 리스트여야 하며, 순서만 바뀔 수 있습니다."
+            }), 400
+
+        # meals 내부의 lunch와 dinner 필드 검증
+        required_meal_fields = ['rice', 'soup', 'dishes', 'kimchi', 'plus_corner']
+        
+        for meal_type in ['lunch', 'dinner']:
+            if meal_type not in meals:
+                return jsonify({"error": f"meals에는 '{meal_type}'가 포함되어야 합니다."}), 400
+            
+            for field in required_meal_fields:
+                if field not in meals[meal_type]:
+                    return jsonify({
+                        "error": f"'{meal_type}'에 '{field}' 필드가 없습니다."
+                    }), 400
+
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # 해당 날짜 데이터 존재 여부 확인
+        cursor.execute('SELECT id FROM menu WHERE date = ?', (date,))
+        if cursor.fetchone() is None:
+            conn.close()
+            return jsonify({"error": "No menu found for this date"}), 404
+        
+        # 데이터 업데이트
+        cursor.execute('''
+        UPDATE menu SET meals = ?, order_seq = ? WHERE date = ?
+        ''', (
+            json.dumps(meals, ensure_ascii=False),
+            json.dumps(order, ensure_ascii=False),
+            date
+        ))
+        conn.commit()
+        conn.close()
+
+        return make_response(jsonify({"message": "Menu updated successfully"}), 200)
+
+    except Exception as e:
+        return make_response(jsonify({"error": str(e)}), 500)
+
 # 메뉴 데이터 추가
 @app.route('/menu', methods=['POST'])
 def add_menu():
