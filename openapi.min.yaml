@@ -10,6 +10,23 @@ paths:
     get:
       summary: 전체 메뉴 조회
       operationId: getAllMenu
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2026-07-18'
+          description: 이 날짜 이상인 식단만 조회합니다.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          example: 7
+          description: 응답할 최대 식단 개수입니다.
       responses:
         '200':
           description: OK
@@ -19,6 +36,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/MenuItem'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
 
     post:
       summary: 메뉴 추가

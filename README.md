@@ -71,9 +71,16 @@ python app.py
 
 - Method: `GET`
 - URL: `/menu`
+- Query Params
+  - `from` (optional): `YYYY-MM-DD` 형식의 시작 날짜
+  - `limit` (optional): 응답할 최대 식단 개수
 
 ```bash
 curl -X GET "http://localhost:8080/menu"
+```
+
+```bash
+curl -X GET "http://localhost:8080/menu?from=2026-07-18&limit=7"
 ```
 
 ### 2) 특정 날짜 메뉴 조회
