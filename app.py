@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, make_response
 import sqlite3
 import os
 import json
+from datetime import date
 
 # Flask 애플리케이션 초기화
 app = Flask(__name__)
@@ -29,28 +30,67 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+def serialize_menu_row(row):
+    return {
+        "id": row[0],
+        "date": row[1],
+        "meals": json.loads(row[2]),
+        "order": json.loads(row[3])
+    }
+
+
+def validate_date_string(value, field_name):
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return jsonify({"error": f"'{field_name}'은 YYYY-MM-DD 형식의 유효한 날짜여야 합니다."}), 400
+
+    return None
+
 # API 엔드포인트
 # 전체 메뉴 조회
 @app.route('/menu', methods=['GET'])
 def get_all_menu():
+    from_date = request.args.get('from')
+    limit = request.args.get('limit')
+
+    if from_date is not None:
+        date_error = validate_date_string(from_date, 'from')
+        if date_error:
+            return date_error
+
+    if limit is not None:
+        try:
+            limit = int(limit)
+        except ValueError:
+            return jsonify({"error": "'limit'은 1 이상의 정수여야 합니다."}), 400
+
+        if limit < 1:
+            return jsonify({"error": "'limit'은 1 이상의 정수여야 합니다."}), 400
+
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    
-    cursor.execute('SELECT * FROM menu')
+
+    query = 'SELECT * FROM menu'
+    params = []
+
+    if from_date is not None:
+        query += ' WHERE date >= ?'
+        params.append(from_date)
+
+    query += ' ORDER BY date ASC'
+
+    if limit is not None:
+        query += ' LIMIT ?'
+        params.append(limit)
+
+    cursor.execute(query, params)
     rows = cursor.fetchall()
-    
+
     conn.close()
 
-    # 데이터 변환
-    menus = [
-        {
-            "id": row[0],
-            "date": row[1],
-            "meals": json.loads(row[2]),    # meals에 lunch와 dinner 모두 포함
-            "order": json.loads(row[3])
-        }
-        for row in rows
-    ]
+    menus = [serialize_menu_row(row) for row in rows]
     
     # UTF-8 헤더 추가
     response = make_response(jsonify(menus))
