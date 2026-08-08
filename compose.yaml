@@ -1,0 +1,12 @@
+services:
+  woory-meal-api:
+    build: .
+    container_name: woory-meal-api
+
+    ports:
+      - "5001:8080"
+
+    volumes:
+      - ./data:/data
+
+    restart: unless-stopped
