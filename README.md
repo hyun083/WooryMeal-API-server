@@ -71,12 +71,21 @@ python app.py
 
 - Method: `GET`
 - URL: `/menu`
+- Description: 기본적으로 전체 메뉴를 조회하며, 필요하면 시작 날짜와 개수를 조건으로 줄여서 조회할 수 있습니다.
 - Query Params
   - `from` (optional): `YYYY-MM-DD` 형식의 시작 날짜
+    - 해당 날짜 이상인 식단만 조회합니다.
   - `limit` (optional): 응답할 최대 식단 개수
+    - `from`과 함께 사용하면 특정 날짜부터 원하는 개수만큼만 조회할 수 있습니다.
+
+`from` 쿼리 파라미터를 생략하면 전체 메뉴를 반환합니다.
 
 ```bash
 curl -X GET "http://localhost:8080/menu"
+```
+
+```bash
+curl -X GET "http://localhost:8080/menu?from=2026-08-08"
 ```
 
 ```bash
