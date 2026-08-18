@@ -1,16 +1,17 @@
 openapi: 3.1.0
 info:
   title: WooryMeal API Server (Minimal)
-  version: 1.0.0
+  version: 2.0.0
 servers:
-  - url: https://api.example.com
+  - url: https://woorymeal.hyunlab.dev
 
 paths:
-  /menu:
+  /{region}/menu:
     get:
       summary: 전체 메뉴 조회
       operationId: getAllMenu
       parameters:
+        - $ref: '#/components/parameters/RegionParam'
         - name: from
           in: query
           required: false
@@ -46,6 +47,8 @@ paths:
     post:
       summary: 메뉴 추가
       operationId: addMenu
+      parameters:
+        - $ref: '#/components/parameters/RegionParam'
       requestBody:
         required: true
         content:
@@ -72,11 +75,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
 
-  /menu/{date}:
+  /{region}/menu/{date}:
     get:
       summary: 특정 날짜 메뉴 조회
       operationId: getMenuByDate
       parameters:
+        - $ref: '#/components/parameters/RegionParam'
         - name: date
           in: path
           required: true
@@ -91,6 +95,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MenuByDate'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
         '404':
           description: Not Found
           content:
@@ -102,6 +112,7 @@ paths:
       summary: 특정 날짜 메뉴 수정
       operationId: updateMenuByDate
       parameters:
+        - $ref: '#/components/parameters/RegionParam'
         - name: date
           in: path
           required: true
@@ -139,6 +150,7 @@ paths:
       summary: 특정 날짜 메뉴 삭제
       operationId: deleteMenuByDate
       parameters:
+        - $ref: '#/components/parameters/RegionParam'
         - name: date
           in: path
           required: true
@@ -153,6 +165,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessMessage'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
         '404':
           description: Not Found
           content:
@@ -162,6 +180,14 @@ paths:
 
 components:
   parameters:
+    RegionParam:
+      name: region
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Region'
+      example: yongin
+
     DateParam:
       name: date
       in: path
@@ -172,6 +198,10 @@ components:
       example: '2025-05-20'
 
   schemas:
+    Region:
+      type: string
+      enum: [yongin, pyeongtaek]
+
     MealPart:
       type: object
       required: [rice, soup, dishes, kimchi, plus_corner]
@@ -213,10 +243,12 @@ components:
 
     MenuItem:
       type: object
-      required: [id, date, meals, order]
+      required: [id, region, date, meals, order]
       properties:
         id:
           type: integer
+        region:
+          $ref: '#/components/schemas/Region'
         date:
           type: string
           format: date
@@ -227,8 +259,10 @@ components:
 
     MenuByDate:
       type: object
-      required: [date, meals, order]
+      required: [region, date, meals, order]
       properties:
+        region:
+          $ref: '#/components/schemas/Region'
         date:
           type: string
           format: date
@@ -260,10 +294,12 @@ components:
 
     SuccessMessage:
       type: object
-      required: [message]
+      required: [message, region]
       properties:
         message:
           type: string
+        region:
+          $ref: '#/components/schemas/Region'
 
     ErrorMessage:
       type: object

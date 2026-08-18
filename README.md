@@ -1,7 +1,7 @@
 # WooryMeal-API-server
 
 우리밀 식단 조회 서비스용 API 서버입니다.  
-Flask와 SQLite를 사용하며, 날짜 기준으로 식단 데이터를 등록, 조회, 수정, 삭제할 수 있습니다.
+Flask와 SQLite를 사용하며, 지역과 날짜 기준으로 식단 데이터를 등록, 조회, 수정, 삭제할 수 있습니다.
 
 ## 기술 스택
 
@@ -24,9 +24,12 @@ Flask와 SQLite를 사용하며, 날짜 기준으로 식단 데이터를 등록,
 식단 데이터는 `menu` 테이블에 저장됩니다.
 
 - `id`: 자동 증가 기본키
-- `date`: 날짜 문자열, 고유값
+- `region`: 지역 식별자 (`yongin` 또는 `pyeongtaek`)
+- `date`: 날짜 문자열
 - `meals`: 점심/저녁 식단 JSON 문자열
 - `order_seq`: 조 순서 JSON 문자열
+
+`region`과 `date`의 조합은 고유하므로 같은 날짜의 식단을 지역별로 저장할 수 있습니다.
 
 `meals`는 다음 구조를 가집니다.
 
@@ -70,8 +73,10 @@ python app.py
 ### 1) 전체 메뉴 조회
 
 - Method: `GET`
-- URL: `/menu`
+- URL: `/<region>/menu`
 - Description: 기본적으로 전체 메뉴를 조회하며, 필요하면 시작 날짜와 개수를 조건으로 줄여서 조회할 수 있습니다.
+- Path Params
+  - `region` (required): `yongin` 또는 `pyeongtaek`
 - Query Params
   - `from` (optional): `YYYY-MM-DD` 형식의 시작 날짜
     - 해당 날짜 이상인 식단만 조회합니다.
@@ -81,34 +86,34 @@ python app.py
 `from` 쿼리 파라미터를 생략하면 전체 메뉴를 반환합니다.
 
 ```bash
-curl -X GET "http://localhost:8080/menu"
+curl -X GET "http://localhost:8080/yongin/menu"
 ```
 
 ```bash
-curl -X GET "http://localhost:8080/menu?from=2026-08-08"
+curl -X GET "http://localhost:8080/yongin/menu?from=2026-08-08"
 ```
 
 ```bash
-curl -X GET "http://localhost:8080/menu?from=2026-07-18&limit=7"
+curl -X GET "http://localhost:8080/yongin/menu?from=2026-07-18&limit=7"
 ```
 
 ### 2) 특정 날짜 메뉴 조회
 
 - Method: `GET`
-- URL: `/menu/<date>`
+- URL: `/<region>/menu/<date>`
 
 ```bash
-curl -X GET "http://localhost:8080/menu/2025-05-20"
+curl -X GET "http://localhost:8080/yongin/menu/2025-05-20"
 ```
 
 ### 3) 메뉴 추가
 
 - Method: `POST`
-- URL: `/menu`
+- URL: `/<region>/menu`
 - Body: `date`, `meals`, `order`
 
 ```bash
-curl -X POST "http://localhost:8080/menu" \
+curl -X POST "http://localhost:8080/yongin/menu" \
 	-H "Content-Type: application/json" \
 	-d '{
 		"date": "2025-05-20",
@@ -135,11 +140,11 @@ curl -X POST "http://localhost:8080/menu" \
 ### 4) 특정 날짜 메뉴 수정
 
 - Method: `PUT`
-- URL: `/menu/<date>`
+- URL: `/<region>/menu/<date>`
 - Body: `meals`, `order`
 
 ```bash
-curl -X PUT "http://localhost:8080/menu/2025-05-20" \
+curl -X PUT "http://localhost:8080/yongin/menu/2025-05-20" \
 	-H "Content-Type: application/json" \
 	-d '{
 		"meals": {
@@ -165,10 +170,10 @@ curl -X PUT "http://localhost:8080/menu/2025-05-20" \
 ### 5) 특정 날짜 메뉴 삭제
 
 - Method: `DELETE`
-- URL: `/menu/<date>`
+- URL: `/<region>/menu/<date>`
 
 ```bash
-curl -X DELETE "http://localhost:8080/menu/2025-05-20"
+curl -X DELETE "http://localhost:8080/yongin/menu/2025-05-20"
 ```
 
 ## 응답 코드 요약
@@ -184,3 +189,5 @@ curl -X DELETE "http://localhost:8080/menu/2025-05-20"
 
 - `DATABASE_PATH`: SQLite 파일 경로
 	- 기본값: `/data/menu.db`
+- `DEFAULT_REGION`: 기존 DB 데이터를 마이그레이션할 지역
+	- 기본값: `yongin`
