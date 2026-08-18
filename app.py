@@ -12,46 +12,128 @@ app.config['JSON_AS_ASCII'] = False
 
 # SQLite 데이터베이스 경로 설정
 DATABASE_PATH = os.getenv('DATABASE_PATH', '/data/menu.db')
+VALID_REGIONS = {"yongin", "pyeongtaek"}
+DEFAULT_REGION = os.getenv('DEFAULT_REGION', 'yongin')
+
+
+MENU_TABLE_SCHEMA = '''
+CREATE TABLE menu (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    region TEXT NOT NULL,
+    date TEXT NOT NULL,
+    meals TEXT NOT NULL,
+    order_seq TEXT NOT NULL,
+    UNIQUE (region, date)
+)
+'''
 
 # 데이터베이스 초기화 함수
 def init_db():
+    if DEFAULT_REGION not in VALID_REGIONS:
+        raise ValueError(
+            f"DEFAULT_REGION은 {sorted(VALID_REGIONS)} 중 하나여야 합니다."
+        )
+
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    
-    # 테이블 생성 (meals에 lunch와 dinner 정보 통합)
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS menu (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL UNIQUE,
-        meals TEXT NOT NULL,  -- JSON 형태로 lunch와 dinner를 함께 저장
-        order_seq TEXT NOT NULL  -- 조 순서 저장
-    )
-    ''')
-    conn.commit()
-    conn.close()
+
+    try:
+        cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'menu'"
+        )
+        table_exists = cursor.fetchone() is not None
+
+        if not table_exists:
+            cursor.execute(MENU_TABLE_SCHEMA)
+            conn.commit()
+            return
+
+        cursor.execute('PRAGMA table_info(menu)')
+        columns = {row[1] for row in cursor.fetchall()}
+
+        cursor.execute('PRAGMA index_list(menu)')
+        unique_indexes = [row[1] for row in cursor.fetchall() if row[2]]
+        unique_column_sets = []
+        for index_name in unique_indexes:
+            cursor.execute(f'PRAGMA index_info("{index_name}")')
+            unique_column_sets.append([row[2] for row in cursor.fetchall()])
+
+        schema_is_current = (
+            'region' in columns
+            and ['region', 'date'] in unique_column_sets
+            and ['date'] not in unique_column_sets
+        )
+        if schema_is_current:
+            return
+
+        # 기존 date UNIQUE 제약을 (region, date) UNIQUE로 변경하며
+        # 기존 데이터는 DEFAULT_REGION에 속한 것으로 이관한다.
+        cursor.execute('DROP TABLE IF EXISTS menu_migration')
+        cursor.execute(MENU_TABLE_SCHEMA.replace('CREATE TABLE menu', 'CREATE TABLE menu_migration'))
+
+        if 'region' in columns:
+            cursor.execute('''
+                INSERT INTO menu_migration (id, region, date, meals, order_seq)
+                SELECT id,
+                       COALESCE(NULLIF(region, ''), ?),
+                       date,
+                       meals,
+                       order_seq
+                FROM menu
+            ''', (DEFAULT_REGION,))
+        else:
+            cursor.execute('''
+                INSERT INTO menu_migration (id, region, date, meals, order_seq)
+                SELECT id, ?, date, meals, order_seq
+                FROM menu
+            ''', (DEFAULT_REGION,))
+
+        cursor.execute('DROP TABLE menu')
+        cursor.execute('ALTER TABLE menu_migration RENAME TO menu')
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def serialize_menu_row(row):
     return {
         "id": row[0],
-        "date": row[1],
-        "meals": json.loads(row[2]),
-        "order": json.loads(row[3])
+        "region": row[1],
+        "date": row[2],
+        "meals": json.loads(row[3]),
+        "order": json.loads(row[4])
     }
 
 
 def validate_date_string(value, field_name):
     try:
         date.fromisoformat(value)
-    except ValueError:
+    except (TypeError, ValueError):
         return jsonify({"error": f"'{field_name}'은 YYYY-MM-DD 형식의 유효한 날짜여야 합니다."}), 400
+
+    return None
+
+
+def validate_region(region):
+    if region not in VALID_REGIONS:
+        return jsonify({
+            "error": f"'{region}'은 지원하지 않는 지역입니다.",
+            "valid_regions": sorted(VALID_REGIONS)
+        }), 400
 
     return None
 
 # API 엔드포인트
 # 전체 메뉴 조회
-@app.route('/menu', methods=['GET'])
-def get_all_menu():
+@app.route('/<region>/menu', methods=['GET'])
+def get_all_menu(region):
+    region_error = validate_region(region)
+    if region_error:
+        return region_error
+
     from_date = request.args.get('from')
     limit = request.args.get('limit')
 
@@ -72,11 +154,11 @@ def get_all_menu():
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
 
-    query = 'SELECT * FROM menu'
-    params = []
+    query = 'SELECT id, region, date, meals, order_seq FROM menu WHERE region = ?'
+    params = [region]
 
     if from_date is not None:
-        query += ' WHERE date >= ?'
+        query += ' AND date >= ?'
         params.append(from_date)
 
     query += ' ORDER BY date ASC'
@@ -98,12 +180,23 @@ def get_all_menu():
     return response
 
 # 특정 날짜 메뉴 조회
-@app.route('/menu/<date>', methods=['GET'])
-def get_menu_by_date(date):
+@app.route('/<region>/menu/<menu_date>', methods=['GET'])
+def get_menu_by_date(region, menu_date):
+    region_error = validate_region(region)
+    if region_error:
+        return region_error
+
+    date_error = validate_date_string(menu_date, 'date')
+    if date_error:
+        return date_error
+
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     
-    cursor.execute('SELECT meals, order_seq FROM menu WHERE date = ?', (date,))
+    cursor.execute(
+        'SELECT meals, order_seq FROM menu WHERE region = ? AND date = ?',
+        (region, menu_date)
+    )
     row = cursor.fetchone()
     
     conn.close()
@@ -117,7 +210,8 @@ def get_menu_by_date(date):
     
     # UTF-8 Content-Type 명시
     response = make_response(jsonify({
-        "date": date,
+        "region": region,
+        "date": menu_date,
         "meals": meals,
         "order": order
     }))
@@ -125,12 +219,23 @@ def get_menu_by_date(date):
     return response
 
 # 특정 날짜 메뉴 삭제
-@app.route('/menu/<date>', methods=['DELETE'])
-def delete_menu_by_date(date):
+@app.route('/<region>/menu/<menu_date>', methods=['DELETE'])
+def delete_menu_by_date(region, menu_date):
+    region_error = validate_region(region)
+    if region_error:
+        return region_error
+
+    date_error = validate_date_string(menu_date, 'date')
+    if date_error:
+        return date_error
+
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
 
-    cursor.execute('DELETE FROM menu WHERE date = ?', (date,))
+    cursor.execute(
+        'DELETE FROM menu WHERE region = ? AND date = ?',
+        (region, menu_date)
+    )
     conn.commit()
     deleted_count = cursor.rowcount
     conn.close()
@@ -138,13 +243,28 @@ def delete_menu_by_date(date):
     if deleted_count == 0:
         return jsonify({"error": "No menu found for this date"}), 404
 
-    return make_response(jsonify({"message": "Menu deleted successfully"}), 200)
+    return make_response(jsonify({
+        "message": "Menu deleted successfully",
+        "region": region
+    }), 200)
 
 # 특정 날짜 메뉴 수정
-@app.route('/menu/<date>', methods=['PUT'])
-def update_menu_by_date(date):
+@app.route('/<region>/menu/<menu_date>', methods=['PUT'])
+def update_menu_by_date(region, menu_date):
+    conn = None
+
     try:
-        data = request.get_json()
+        region_error = validate_region(region)
+        if region_error:
+            return region_error
+
+        date_error = validate_date_string(menu_date, 'date')
+        if date_error:
+            return date_error
+
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "JSON 객체 본문이 필요합니다."}), 400
 
         # 필수 필드 확인
         if 'meals' not in data or 'order' not in data:
@@ -178,36 +298,59 @@ def update_menu_by_date(date):
         cursor = conn.cursor()
         
         # 해당 날짜 데이터 존재 여부 확인
-        cursor.execute('SELECT id FROM menu WHERE date = ?', (date,))
+        cursor.execute(
+            'SELECT id FROM menu WHERE region = ? AND date = ?',
+            (region, menu_date)
+        )
         if cursor.fetchone() is None:
-            conn.close()
             return jsonify({"error": "No menu found for this date"}), 404
         
         # 데이터 업데이트
         cursor.execute('''
-        UPDATE menu SET meals = ?, order_seq = ? WHERE date = ?
+        UPDATE menu SET meals = ?, order_seq = ? WHERE region = ? AND date = ?
         ''', (
             json.dumps(meals, ensure_ascii=False),
             json.dumps(order, ensure_ascii=False),
-            date
+            region,
+            menu_date
         ))
         conn.commit()
-        conn.close()
 
-        return make_response(jsonify({"message": "Menu updated successfully"}), 200)
+        return make_response(jsonify({
+            "message": "Menu updated successfully",
+            "region": region
+        }), 200)
 
     except Exception as e:
+        if conn is not None:
+            conn.rollback()
         return make_response(jsonify({"error": str(e)}), 500)
 
+    finally:
+        if conn is not None:
+            conn.close()
+
 # 메뉴 데이터 추가
-@app.route('/menu', methods=['POST'])
-def add_menu():
+@app.route('/<region>/menu', methods=['POST'])
+def add_menu(region):
+    conn = None
+
     try:
-        data = request.get_json()
+        region_error = validate_region(region)
+        if region_error:
+            return region_error
+
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "JSON 객체 본문이 필요합니다."}), 400
 
         # 필수 필드 확인
         if 'date' not in data or 'meals' not in data or 'order' not in data:
             return jsonify({"error": "'date', 'meals', 'order' 필드는 필수입니다."}), 400
+
+        date_error = validate_date_string(data['date'], 'date')
+        if date_error:
+            return date_error
 
         meals = data['meals']
         order = data['order']
@@ -238,23 +381,34 @@ def add_menu():
         
         # 데이터 삽입 (JSON 형태로 저장)
         cursor.execute('''
-        INSERT INTO menu (date, meals, order_seq)
-        VALUES (?, ?, ?)
+        INSERT INTO menu (region, date, meals, order_seq)
+        VALUES (?, ?, ?, ?)
         ''', (
+            region,
             data['date'],
             json.dumps(data['meals'], ensure_ascii=False),
             json.dumps(order, ensure_ascii=False)
         ))
         conn.commit()
-        conn.close()
 
-        return make_response(jsonify({"message": "Menu added successfully"}), 201)
+        return make_response(jsonify({
+            "message": "Menu added successfully",
+            "region": region
+        }), 201)
 
     except sqlite3.IntegrityError:
-        return jsonify({"error": "이미 존재하는 날짜입니다."}), 409
+        if conn is not None:
+            conn.rollback()
+        return jsonify({"error": "해당 지역에 이미 존재하는 날짜입니다."}), 409
 
     except Exception as e:
+        if conn is not None:
+            conn.rollback()
         return make_response(jsonify({"error": str(e)}), 500)
+
+    finally:
+        if conn is not None:
+            conn.close()
 
 # 데이터베이스 초기화 및 서버 시작
 init_db()
