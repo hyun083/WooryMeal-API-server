@@ -11,7 +11,14 @@ paths:
       summary: 전체 메뉴 조회
       operationId: getAllMenu
       parameters:
-        - $ref: '#/components/parameters/RegionParam'
+        - name: region
+          in: path
+          required: true
+          description: 요청할 지역입니다. 용인은 yongin, 평택은 pyeongtaek을 사용합니다.
+          schema:
+            type: string
+            enum: [yongin, pyeongtaek]
+          example: yongin
         - name: from
           in: query
           required: false
@@ -48,7 +55,14 @@ paths:
       summary: 메뉴 추가
       operationId: addMenu
       parameters:
-        - $ref: '#/components/parameters/RegionParam'
+        - name: region
+          in: path
+          required: true
+          description: 요청할 지역입니다. 용인은 yongin, 평택은 pyeongtaek을 사용합니다.
+          schema:
+            type: string
+            enum: [yongin, pyeongtaek]
+          example: yongin
       requestBody:
         required: true
         content:
@@ -80,7 +94,14 @@ paths:
       summary: 특정 날짜 메뉴 조회
       operationId: getMenuByDate
       parameters:
-        - $ref: '#/components/parameters/RegionParam'
+        - name: region
+          in: path
+          required: true
+          description: 요청할 지역입니다. 용인은 yongin, 평택은 pyeongtaek을 사용합니다.
+          schema:
+            type: string
+            enum: [yongin, pyeongtaek]
+          example: yongin
         - name: date
           in: path
           required: true
@@ -112,7 +133,14 @@ paths:
       summary: 특정 날짜 메뉴 수정
       operationId: updateMenuByDate
       parameters:
-        - $ref: '#/components/parameters/RegionParam'
+        - name: region
+          in: path
+          required: true
+          description: 요청할 지역입니다. 용인은 yongin, 평택은 pyeongtaek을 사용합니다.
+          schema:
+            type: string
+            enum: [yongin, pyeongtaek]
+          example: yongin
         - name: date
           in: path
           required: true
@@ -150,7 +178,14 @@ paths:
       summary: 특정 날짜 메뉴 삭제
       operationId: deleteMenuByDate
       parameters:
-        - $ref: '#/components/parameters/RegionParam'
+        - name: region
+          in: path
+          required: true
+          description: 요청할 지역입니다. 용인은 yongin, 평택은 pyeongtaek을 사용합니다.
+          schema:
+            type: string
+            enum: [yongin, pyeongtaek]
+          example: yongin
         - name: date
           in: path
           required: true
@@ -179,24 +214,6 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
 
 components:
-  parameters:
-    RegionParam:
-      name: region
-      in: path
-      required: true
-      schema:
-        $ref: '#/components/schemas/Region'
-      example: yongin
-
-    DateParam:
-      name: date
-      in: path
-      required: true
-      schema:
-        type: string
-        format: date
-      example: '2025-05-20'
-
   schemas:
     Region:
       type: string
